@@ -75,10 +75,7 @@ class MirrorListener(listeners.MirrorListeners):
             try:
                 with download_dict_lock:
                     download_dict[self.uid] = TarStatus(name, m_path, size)
-                if self.isZip:
-                    path = fs_utils.zip(name, m_path)
-                else:
-                    path = fs_utils.tar(m_path)
+                path = fs_utils.zip(name, m_path) if self.isZip else fs_utils.tar(m_path)
             except FileNotFoundError:
                 LOGGER.info('File to archive not found!')
                 self.onUploadError('Internal error occurred!!')
@@ -132,7 +129,6 @@ class MirrorListener(listeners.MirrorListeners):
                 fs_utils.clean_download(download.path())
             except Exception as e:
                 LOGGER.error(str(e))
-                pass
             count = len(download_dict)
         if self.message.from_user.username:
             uname = f"@{self.message.from_user.username}"
@@ -156,9 +152,7 @@ class MirrorListener(listeners.MirrorListeners):
             msg = f'<b>☞ 📂Filename : </b><code>{download_dict[self.uid].name()}</code>\n<b>☞ 📦Size : </b><code>{size}</code>'
             if os.path.isdir(f'{DOWNLOAD_DIR}/{self.uid}/{download_dict[self.uid].name()}'):
                 msg += '\n<b>☞ 🌀Type : </b><code>Folder</code>'
-                msg += f'\n<b>☞ 🗳Powerd by : @AT_BOTs</b>'
-            else:
-                msg += f'\n<b>☞ 🗳Powerd by : @AT_BOTs</b>'
+            msg += '\n<b>☞ 🗳Powerd by : @AT_BOTs</b>'
             buttons = button_build.ButtonMaker()
             if SHORTENER is not None and SHORTENER_API is not None:
                 surl = requests.get(f'https://{SHORTENER}/api?api={SHORTENER_API}&url={link}&format=text').text
@@ -240,7 +234,7 @@ def _mirror(bot, update, isTar=False, extract=False, isZip=False, isQbit=False):
     qbitsel = False
     try:
         link = message_args[1]
-        if link == "qb" or link == "qbs":
+        if link in ["qb", "qbs"]:
             isQbit = True
             if link == "qbs":
                 qbitsel = True
@@ -299,32 +293,36 @@ def _mirror(bot, update, isTar=False, extract=False, isZip=False, isQbit=False):
             if i is not None:
                 file = i
                 break
-                
+
+        if (
+            (
+                not bot_utils.is_url(link)
+                and not bot_utils.is_magnet(link)
+                or len(link) == 0
+            )
+        ) and file is None:
+            reply_text = reply_to.text
+            reply_text = re.split('\n ', reply_text)[0]
+            if bot_utils.is_url(reply_text) or bot_utils.is_magnet(reply_text):
+                link = reply_text
+
         if (
             not bot_utils.is_url(link)
             and not bot_utils.is_magnet(link)
             or len(link) == 0
-        ):
-            if file is None:
-                reply_text = reply_to.text
-                reply_text = re.split('\n ', reply_text)[0]
-                if bot_utils.is_url(reply_text) or bot_utils.is_magnet(reply_text):
-                    link = reply_text
-
-        if not bot_utils.is_url(link) and not bot_utils.is_magnet(link) or len(link) == 0:
-            if file is not None:
-                if file.mime_type != "application/x-bittorrent":
-                    listener = MirrorListener(bot, update, pswd, isTar, extract, isZip)
-                    tg_downloader = TelegramDownloadHelper(listener)
-                    ms = update.message
-                    tg_downloader.add_download(ms, f'{DOWNLOAD_DIR}{listener.uid}/', name)
-                    return
+        ) and file is not None:
+            if file.mime_type != "application/x-bittorrent":
+                listener = MirrorListener(bot, update, pswd, isTar, extract, isZip)
+                tg_downloader = TelegramDownloadHelper(listener)
+                ms = update.message
+                tg_downloader.add_download(ms, f'{DOWNLOAD_DIR}{listener.uid}/', name)
+                return
+            else:
+                if isQbit:
+                    file.get_file().download(custom_path=f"/usr/src/app/{file.file_name}")
+                    link = f"/usr/src/app/{file.file_name}"
                 else:
-                    if isQbit:
-                        file.get_file().download(custom_path=f"/usr/src/app/{file.file_name}")
-                        link = f"/usr/src/app/{file.file_name}"
-                    else:
-                        link = file.get_file().file_path
+                    link = file.get_file().file_path
 
     if bot_utils.is_url(link) and not bot_utils.is_magnet(link) and not os.path.exists(link) and isQbit:
         resp = requests.get(link)
@@ -364,8 +362,7 @@ def _mirror(bot, update, isTar=False, extract=False, isZip=False, isQbit=False):
             sendMessage(res, bot, update)
             return
         if TAR_UNZIP_LIMIT is not None:
-            result = check_limit(size, TAR_UNZIP_LIMIT)
-            if result:
+            if result := check_limit(size, TAR_UNZIP_LIMIT):
                 msg = f'Failed, Tar/Unzip limit is {TAR_UNZIP_LIMIT}.\nYour File/Folder size is {get_readable_file_size(size)}.'
                 sendMessage(msg, listener.bot, listener.update)
                 return
