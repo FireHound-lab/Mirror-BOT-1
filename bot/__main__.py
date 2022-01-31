@@ -63,8 +63,13 @@ Type /{BotCommands.HelpCommand} to get a list of available commands
             sendMessage(f"Hey I'm Alive 🙂\nSince: <code>{uptime}</code>", context.bot, update)
         else :
             sendMarkup(IMAGE_URL, start_string, context.bot, update, reply_markup)
-    else :
-        sendMarkup(f"Oops! You are not allowed to use me.</b>.", context.bot, update, reply_markup)
+    else:
+        sendMarkup(
+            'Oops! You are not allowed to use me.</b>.',
+            context.bot,
+            update,
+            reply_markup,
+        )
 
 
 def restart(update, context):
